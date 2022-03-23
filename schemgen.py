@@ -19,6 +19,9 @@ class Block():
         self.y = y
         self.z = z
 
+    def __str__(self):
+        return f"Block({self.x}, {self.y}, {self.z}, {self.ident + self.extra})"
+
     @property
     def pos(self):
         return (self.x, self.y, self.z)
@@ -61,9 +64,13 @@ def Signal(x, y, z, ss):
     
     
 #make a schematic out of a list of blocks. The origin for //paste is given by (x, y, z)
-def schem(blocks, x, y, z):
+def blocks_to_schem(mblocks, x, y, z):
     assert type(x) == type(y) == type(z) == int
-    blocks = {block.pos : block for block in blocks}
+
+    blocks = {}
+    for block in mblocks:
+        blocks[block.pos] = block
+    
     assert len(blocks) != 0
     min_x = min(p[0] for p in blocks)
     min_y = min(p[1] for p in blocks)
@@ -129,6 +136,43 @@ def schem(blocks, x, y, z):
     return nbtlib.File(Compound({"Schematic" : comp}), gzipped = True)
 
 
+def schem_to_blocks(file):
+    comp = file.root
+
+    width = int(comp["Width"])
+    height = int(comp["Height"])
+    length = int(comp["Length"])
+    
+    def t13(idx):
+        assert 0 <= idx < width * height * length
+        yz, x = divmod(idx, width)
+        y, z = divmod(yz, length)
+        assert 0 <= x < width
+        assert 0 <= y < height
+        assert 0 <= z < length
+        return x, y, z
+
+    block_data = [int(x) for x in comp["BlockData"]]
+    palette_max = comp["PaletteMax"]
+    palette = {int(idx) : ident for ident, idx in comp["Palette"].items()}
+
+    we_x = -int(comp["Metadata"]["WEOffsetX"])
+    we_y = -int(comp["Metadata"]["WEOffsetY"])
+    we_z = -int(comp["Metadata"]["WEOffsetZ"])
+
+    for idx in range(width * height * length):
+        x, y, z = t13(idx)
+        ident_extra = palette[block_data[idx]]
+        if "[" in ident_extra:
+            k = ident_extra.index("[")
+            ident, extra = ident_extra[:k], ident_extra[k:]
+        else:
+            ident, extra = ident_extra, ""
+        yield Block(x - we_x, y - we_y, z - we_z, ident, extra)
+
+    
+    
+
 def print_nbt(file):
     print(f"gzipped = {file.gzipped}")
     print()
@@ -138,9 +182,11 @@ def print_nbt(file):
         print(f"{key} = {file.root[key]}")
     
 
-if __name__ == "__main__":
+
+
+def make_schem():
     #yield all the blocks you want in the schematic
-    #if multiple blocks are yielded to the same location idk what happens, one of them will be chosen
+    #if multiple blocks are yielded to the same location, the last one is the chosen one
     def gen_blocks():
         for x in range(-2, 16):
             for y in range(-2, 8):
@@ -156,11 +202,15 @@ if __name__ == "__main__":
         return
         yield
         
-    file = schem(gen_blocks(), 16, 8, 4)
+    file = blocks_to_schem(gen_blocks(), 16, 8, 4)
     #print_nbt(file)
     file.save("output.schem")
 
 
+
+
+if __name__ == "__main__":
+    make_schem()
 
 
 
