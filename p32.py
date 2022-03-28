@@ -67,17 +67,25 @@ def code_to_schem(code):
 
 code = [[0, 0, 0, 0] for _ in range(2 ** 12)]
 
-code[0] = [4, 1, 1, 0]
-code[1] = [5, 2, 2, 1]
-code[2] = [6, 3, 3, 2]
-code[3] = [4, 4, 4, 3]
-code[4] = [5, 5, 5, 4]
-code[5] = [6, 6, 6, 5]
-code[6] = [4, 7, 7, 6]
-code[7] = [5, 8, 8, 7]
-code[8] = [6, 9, 9, 8]
-
-
+import random
+for i in range(2 ** 12):
+    code[i] = [random.randint(0, 15), (i // 256) % 16, (i // 16) % 16, i % 16]
+##
+##code[0][0] = 0
+##code[1][0] = 4
+##code[2][0] = 4
+##code[3][0] = 7
+##code[4][0] = 4
+##code[5][0] = 0
+##code[7][0] = 0
+##code[8][0] = 0
+##code[9][0] = 0
+##code[10][0] = 0
+##code[11][0] = 0
+##code[12][0] = 0
+##code[13][0] = 0
+##code[14][0] = 0
+##code[15][0] = 0
 
 ##
 ##for i in range(16):
