@@ -1,2 +1,2 @@
 # SchematicGen
-A bit of python for generating .schem files for use with worldedit and minecraft.
+A small program for creating .schem files for use with worldedit in minecraft.
