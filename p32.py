@@ -68,24 +68,27 @@ def code_to_schem(code):
 code = [[0, 0, 0, 0] for _ in range(2 ** 12)]
 
 import random
-for i in range(2 ** 12):
-    code[i] = [random.randint(0, 15), (i // 256) % 16, (i // 16) % 16, i % 16]
-##
-##code[0][0] = 0
-##code[1][0] = 4
-##code[2][0] = 4
-##code[3][0] = 7
-##code[4][0] = 4
-##code[5][0] = 0
-##code[7][0] = 0
-##code[8][0] = 0
-##code[9][0] = 0
-##code[10][0] = 0
-##code[11][0] = 0
-##code[12][0] = 0
-##code[13][0] = 0
-##code[14][0] = 0
-##code[15][0] = 0
+##for i in range(2 ** 12):
+##    code[i] = [0, (i // 256) % 16, (i // 16) % 16, i % 16]
+
+code[0] = [0, 1]
+code[1] = [0, 2]
+code[2] = [0, 3]
+code[3] = [0, 4]
+code[4] = [0, 5]
+code[5] = [6, 18]
+code[6] = [0, 7]
+code[7] = [0, 8]
+code[8] = [0, 9]
+code[9] = [0, 10]
+code[11] = [4, 2]
+
+code[18] = [0, 12]
+code[19] = [0, 13]
+code[20] = [0, 14]
+code[21] = [7, 15]
+
+
 
 ##
 ##for i in range(16):
@@ -95,7 +98,18 @@ for i in range(2 ** 12):
 ##for i in range(16):
 ##    code[i + 32] = [i, 2, 7, 15]
 
+def expand(code):
+    exp_code = []
+    for item in code:
+        if len(item) == 4:
+            exp_code.append(item)
+        elif len(item) == 2:
+            exp_code.append([item[0], (item[1] // 256) % 16, (item[1] // 16) % 16, item[1] % 16])
+        else:
+            raise Exception()
+    return exp_code
 
+code = expand(code)
 schem = code_to_schem(code)
 schem.save("p32_code.schem")
 
