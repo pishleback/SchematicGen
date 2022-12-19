@@ -209,6 +209,28 @@ def make_schem():
 
 
 
+
+def make_schem():
+    def gen_blocks():
+        yield Block(0, 1, 0, "minecraft:light_blue_wool")
+        yield Block(1, 0, 0, "minecraft:light_blue_wool")
+        yield Block(1, 0, 1, "minecraft:light_blue_wool")
+        yield Block(0, 0, 1, "minecraft:light_blue_wool")
+
+        yield Block(0, 1, 1, "minecraft:redstone_wire", extra = "[power=3,east=side,west=side,north=none,south=none]")
+        yield Block(1, 1, 1, "minecraft:comparator", extra = "[mode=subtract,powered=true,facing=south]")
+        yield Block(1, 1, 0, "minecraft:comparator", extra = "[mode=subtract,powered=true,facing=east]")
+        yield Block(1, 1, 2, "minecraft:redstone_block")
+        yield Block(2, 1, 0, "minecraft:redstone_block")
+    
+        
+    file = blocks_to_schem(gen_blocks(), 0, 3, 0)
+    #print_nbt(file)
+    file.save("output.schem")
+    
+
+
+
 if __name__ == "__main__":
     make_schem()
 
