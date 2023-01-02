@@ -335,6 +335,8 @@ class Page():
         for line in lines:
             if isinstance(line, OppLine):
                 if line.oppcode in {"PAGECALL"}:
+                    print(page_label_lookup)
+                    
                     line.jumpto_page = rampage_label_lookup[line.page]
                     try:
                         line.jumpto_num = page_label_lookup[line.page][line.jumpto]
@@ -413,6 +415,13 @@ def compile_assembly(code):
             compiled_ram += "  "
         compiled_ram += pages[rampage_label].compile()
 
+    for idx, page in compiled_rom.items():
+        if (n := len(page.replace(" ", ""))) > 2 ** 8:
+            raise Exception(f"Page {idx} has more nibbles {n} than the maximum size {2 ** 8}.")
+    n = len(compiled_ram.replace(" ", ""))
+    if n > 4 * 2 ** 12:
+        raise Exception(f"RAM has more nibbles {n} than the maximum size {4 * 2 ** 12}.")
+
     return compiled_rom, compiled_ram
         
 
@@ -432,11 +441,25 @@ def compile_schem(source_path, target_path, active_pages = {1, 2, 3, 4, 5, 6, 7,
     
     with open(source_path) as f:
         code, ram = compile_assembly(f.read())
-        code = {p : code[p].replace(" ", "") for p in range(16)}
+        code = {p : code.get(p, "").replace(" ", "") for p in range(16)}
 
-        def gen_blocks():
-            print(ram)
-            
+        ram = ram.replace(" ", "")
+        assert len(ram) < 4 * 2 ** 12
+
+        def ram_adr_to_block_pos(i):
+            n = [3, 2, 1, 0, 7, 6, 5, 4][i % 8]
+            xi = (i // 1024) % 16
+            yi = (i // 8) % 4
+            zi = (i // 32) % 32
+            x_dir = [1, -1][xi % 2]
+
+            x = 17 - 6 * xi - 3 * x_dir
+            y = -119 + 18 * yi + 2 * n
+            z = 29 - 4 * zi
+
+            return x, y, z, x_dir
+
+        def gen_blocks():            
             for page in range(16):
                 if page in active_pages:
                     if page == 0:
@@ -482,9 +505,9 @@ def compile_schem(source_path, target_path, active_pages = {1, 2, 3, 4, 5, 6, 7,
                             
                             for b in range(4):
                                 x, y, z = xo - 2 * (i % 32), yo - 2 * (i // 32), zo
-                                m =  "0123456789ABCDEF".index(n)
+                                m = "0123456789ABCDEF".index(n)
                                 if m == 0:
-                                    yield schemgen.Block(x, y, z, "minecraft:glass")
+                                    yield schemgen.Block(0, 0, 0, "minecraft:glass")
                                 else:
                                     yield schemgen.Signal(x, y, z, m)
                         
@@ -492,6 +515,26 @@ def compile_schem(source_path, target_path, active_pages = {1, 2, 3, 4, 5, 6, 7,
         file = schemgen.blocks_to_schem(gen_blocks(), 0, 0, 0)
         file.save(target_path)
         print("Schematic saved")
+
+        if len(ram) - ram.count("0") > 2 ** 12: #over a quarter full
+            print(f"ram do be quite big with {len(ram) - ram.count('0')} sus entries, might cause crashes when loading schematic!!")
+
+        def gen_blocks():
+            for i in range(len(ram)):
+                x, y, z, x_dir = ram_adr_to_block_pos(i)
+                yield schemgen.Block(x + 2 * x_dir, y, z - 1, "minecraft:glass")
+                if ram[i] == "0":
+                    yield schemgen.Block(x + x_dir, y, z, "minecraft:brown_wool")
+                else:
+                    yield schemgen.Signal(x + x_dir, y, z, "0123456789ABCDEF".index(ram[i]))
+                
+                    
+        file = schemgen.blocks_to_schem(gen_blocks(), 0, 0, 0)
+        file.save("ram_" + target_path)
+        print("Schematic saved")
+
+
+        
 
 
 
