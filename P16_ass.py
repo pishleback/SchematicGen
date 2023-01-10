@@ -105,7 +105,7 @@ class OppLine(Line):
             self.value = parse_integer(opperands[0])
         elif self.oppcode == "JUMP":
             check_num_opperands(1)
-            self.jumpto = opperands[0]
+            self.jumpto_label = opperands[0]
             self.jumpto_num = None
         elif self.oppcode == "BRANCH":
             check_num_opperands(2)
@@ -114,7 +114,7 @@ class OppLine(Line):
                 raise Exception(f"P16 Syntax error: Unknown branch condition {condition}, must be one of " + ", ".join(cond for cond in BRANCH_CONDITIONS))
             self.condition = BRANCH_CONDITIONS[condition]
             assert type(self.condition) == int and 0 <= self.condition < 16
-            self.jumpto = opperands[1]
+            self.jumpto_label = opperands[1]
             self.jumpto_num = None
         elif self.oppcode == "PUSH":
             check_num_opperands(1)
@@ -124,7 +124,7 @@ class OppLine(Line):
             self.register = parse_register(opperands[0])
         elif self.oppcode == "CALL":
             check_num_opperands(1)
-            self.jumpto = opperands[0]
+            self.jumpto_label = opperands[0]
             self.jumpto_num = None
         elif self.oppcode == "RETURN":
             check_num_opperands(0)
@@ -151,13 +151,15 @@ class OppLine(Line):
                     raise Exception(f"P16 Syntax error: {opperands[0]} is not a valid {self.oppcode} opperation with 2 opperands")
             else:
                 raise Exception(f"P16 Syntax error: ALU/RAM oppcode has the wrong number of opperands, got {len(opperands)} but need either 1 or 2")
-        elif self.oppcode == "PAGECALL":
+        elif self.oppcode == "ROMCALL":
             check_num_opperands(2)
-            if opperands[0] in {str(k) for k in range(16)}:
-                self.page = int(opperands[0]) #ROM page
-            else:
-                self.page = opperands[0] #RAM page label
-            self.jumpto = opperands[1]
+            self.page = int(opperands[0]) #ROM page
+            self.jumpto_label = opperands[1]
+            self.jumpto_num = None
+            self.jumpto_page = None
+        elif self.oppcode == "RAMCALL":
+            check_num_opperands(1)
+            self.jumpto_label = opperands[0]
             self.jumpto_num = None
             self.jumpto_page = None
         elif self.oppcode == "PAGERETURN":
@@ -191,7 +193,7 @@ class OppLine(Line):
             return 2
         elif self.oppcode in {"VALUE", "JUMP", "CALL", "ROTATE"}:
             return 3
-        elif self.oppcode in {"BRANCH", "PAGECALL"}:
+        elif self.oppcode in {"BRANCH", "ROMCALL", "RAMCALL"}: #at some point, ramcall replaces pagereturn and the length will be 3 not 4
             return 4
         elif self.oppcode == "OUTPUT":
             return 1 + len(self.address_octal)
@@ -217,7 +219,8 @@ class OppLine(Line):
                        "RETURN" : "7",
                        "ADD" : "8",
                        "ROTATE" : "9",
-                       "PAGECALL" : "C",
+                       "ROMCALL" : "C",
+                       "RAMCALL" : "C",
                        "PAGERETURN" : "D",
                        "INPUT" : "E",
                        "OUTPUT" : "F"}[self.oppcode]
@@ -233,7 +236,9 @@ class OppLine(Line):
             opperands = ""
         elif self.oppcode in {"PUSH", "POP", "ADD"}:
             opperands = "0123456789ABCDEF"[self.register]
-        elif self.oppcode == "PAGECALL":
+        elif self.oppcode == "ROMCALL":
+            opperands = "0123456789ABCDEF"[self.jumpto_page] + "0123456789ABCDEF"[self.jumpto_num // 16] + "0123456789ABCDEF"[self.jumpto_num % 16]
+        elif self.oppcode == "RAMCALL":
             opperands = "0123456789ABCDEF"[self.jumpto_page] + "0123456789ABCDEF"[self.jumpto_num // 16] + "0123456789ABCDEF"[self.jumpto_num % 16]
         elif self.oppcode == "VALUE":
             opperands = "0123456789ABCDEF"[self.value // 16] + "0123456789ABCDEF"[self.value % 16]
@@ -302,7 +307,7 @@ def make_line(line):
 
 
 class Page():
-    def __init__(self, ident, lines, page_label_lookup, rampage_label_lookup):
+    def __init__(self, ident, lines, page_label_lookup, rampage_jumpto_lookup):
         #1) convert directives into opperations
         new_lines = []
         last_flag_setter = 0
@@ -326,22 +331,35 @@ class Page():
         for line in lines:
             if isinstance(line, OppLine):
                 if line.oppcode in {"JUMP", "BRANCH", "CALL"}:
-                    if not line.jumpto in page_label_lookup[ident]:
-                        raise Exception(f"P16 Syntax error: line {line} refers to label \"{line.jumpto}\", but this label has not been assigned")
+                    if not line.jumpto_label in page_label_lookup[ident]:
+                        raise Exception(f"P16 Syntax error: line {line} refers to label \"{line.jumpto_label}\", but this label has not been assigned")
                     else:
-                        line.jumpto_num = page_label_lookup[ident][line.jumpto]
+                        line.jumpto_num = page_label_lookup[ident][line.jumpto_label]
 
-        #3) assign addresses to pagecalls5
+        #3) assign addresses to pagecalls
         for line in lines:
             if isinstance(line, OppLine):
-                if line.oppcode in {"PAGECALL"}:
-                    print(page_label_lookup)
-                    
-                    line.jumpto_page = rampage_label_lookup[line.page]
+                if line.oppcode in {"ROMCALL"}:
+                    line.jumpto_page = line.page
                     try:
-                        line.jumpto_num = page_label_lookup[line.page][line.jumpto]
+                        line.jumpto_num = page_label_lookup[line.page][line.jumpto_label]
                     except KeyError:
-                        raise Exception(f"Label \"{line.jumpto}\" not found in page {line.jumpto_page}")
+                        raise Exception(f"Label \"{line.jumpto_label}\" not found in page {line.jumpto_page}")
+
+                if line.oppcode in {"RAMCALL"}:
+
+                    print(page_label_lookup, rampage_jumpto_lookup)
+
+                    print(line.jumpto_label)
+                    
+                    if type(ident) == int:
+                        line.jumpto_page = ident
+                    else:
+                        raise NotImplementedError("Cannot yet call ram page from within a ram page. Need a P16 hardware update")
+
+
+
+                        
 
         self.lines = lines
 
@@ -380,13 +398,13 @@ def compile_assembly(code):
     #concatenate ram pages into a single list of lines and compute ramlabel -> ram idx lookup
 
     #concatenate ram pages into a single list of lines and compute ramlabel -> ram idx lookup
-    rampage_label_lookup = {} #rampage label -> address of start of page
+    rampage_jumpto_lookup = {} #rampage label -> address of start of page
     rampage_label_order = []
     ptr = 0
     for ident, page in pages.items():
         if type(ident) == str: #ram page
             rampage_label_order.append(ident)
-            rampage_label_lookup[ident] = ptr
+            rampage_jumpto_lookup[ident] = ptr
             for line in page:
                 ptr += line.length()
 
@@ -404,7 +422,7 @@ def compile_assembly(code):
             adr += line.length()
         length = adr
 
-    pages = {ident : Page(ident, lines, page_label_lookup, rampage_label_lookup) for ident, lines in pages.items()}
+    pages = {ident : Page(ident, lines, page_label_lookup, rampage_jumpto_lookup) for ident, lines in pages.items()}
     compiled_rom = {}
     for ident in range(16):
         if ident in pages:

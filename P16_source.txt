@@ -5,14 +5,21 @@ ALU dup
 OUTPUT 1.0
 ALU inc
 JUMP loop
-PAGECALL rampage2 start
-PAGECALL 2 start
+RAMCALL start
+ROMCALL 2 start
 VALUE 0
 VALUE 0
 VALUE 0
 
+.PAGE 2
+VALUE 0
+VALUE 1
+VALUE 2
+.LABEL start
+VALUE 69
+
 .RAM rampage1
-OUTPUT 1.2.3.4.5.6.7.0.1.2.3.4.5.6.7.0.1.2.3.4.5.6.7.0.1.2.3.4.5.6.7
+OUTPUT 0.1.2.3.4.5.6.7
 
 .RAM rampage2
 VALUE 0
