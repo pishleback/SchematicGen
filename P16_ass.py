@@ -106,7 +106,7 @@ class OppLine(Line):
         elif self.oppcode == "JUMP":
             check_num_opperands(1)
             self.jumpto_label = opperands[0]
-            self.jumpto_num = None
+            self.jumpto_local = None
         elif self.oppcode == "BRANCH":
             check_num_opperands(2)
             condition = opperands[0]
@@ -115,7 +115,7 @@ class OppLine(Line):
             self.condition = BRANCH_CONDITIONS[condition]
             assert type(self.condition) == int and 0 <= self.condition < 16
             self.jumpto_label = opperands[1]
-            self.jumpto_num = None
+            self.jumpto_local = None
         elif self.oppcode == "PUSH":
             check_num_opperands(1)
             self.register = parse_register(opperands[0])
@@ -125,7 +125,13 @@ class OppLine(Line):
         elif self.oppcode == "CALL":
             check_num_opperands(1)
             self.jumpto_label = opperands[0]
-            self.jumpto_num = None
+            self.jumpto_local = None
+            #jumpto_page is set to:
+            #("INTERNAL", None) for local calls
+            #("ROM", page : int) for prom
+            #("RAM", addr : int) for pram
+            self.jumpto_page = None
+            #the length depends on the value of jumpto_page, so we need to figure it out before finding exact addresses
         elif self.oppcode == "RETURN":
             check_num_opperands(0)
         elif self.oppcode == "ADD":
@@ -151,17 +157,6 @@ class OppLine(Line):
                     raise Exception(f"P16 Syntax error: {opperands[0]} is not a valid {self.oppcode} opperation with 2 opperands")
             else:
                 raise Exception(f"P16 Syntax error: ALU/RAM oppcode has the wrong number of opperands, got {len(opperands)} but need either 1 or 2")
-        elif self.oppcode == "ROMCALL":
-            check_num_opperands(2)
-            self.page = int(opperands[0]) #ROM page
-            self.jumpto_label = opperands[1]
-            self.jumpto_num = None
-            self.jumpto_page = None
-        elif self.oppcode == "RAMCALL":
-            check_num_opperands(1)
-            self.jumpto_label = opperands[0]
-            self.jumpto_num = None
-            self.jumpto_page = None
         elif self.oppcode == "PAGERETURN":
             check_num_opperands(0)
         elif self.oppcode == "INPUT":
@@ -185,22 +180,15 @@ class OppLine(Line):
         return False
 
     def length(self):
-        if self.oppcode in {"ALU", "RAM"}:
-            return 1 + self.aluram_type
-        elif self.oppcode in {"PASS", "RETURN", "INPUT", "PAGERETURN"}:
-            return 1
-        elif self.oppcode in {"PUSH", "POP", "ADD"}:
-            return 2
-        elif self.oppcode in {"VALUE", "JUMP", "CALL", "ROTATE"}:
-            return 3
-        elif self.oppcode in {"BRANCH", "ROMCALL", "RAMCALL"}: #at some point, ramcall replaces pagereturn and the length will be 3 not 4
-            return 4
-        elif self.oppcode == "OUTPUT":
-            return 1 + len(self.address_octal)
-        else:
-            raise NotImplementedError()
+        return len(self.compile())
 
     def compile(self):
+        def int8_to_nibbles(val):
+            if val is None:
+                return "XX"
+            else:
+                return "0123456789ABCDEF"[val // 16] + "0123456789ABCDEF"[val % 16]
+        
         if self.oppcode in {"ALU", "RAM"}:
             if self.aluram_type == 1:
                 oppcode = "A"
@@ -236,18 +224,30 @@ class OppLine(Line):
             opperands = ""
         elif self.oppcode in {"PUSH", "POP", "ADD"}:
             opperands = "0123456789ABCDEF"[self.register]
-        elif self.oppcode == "ROMCALL":
-            opperands = "0123456789ABCDEF"[self.jumpto_page] + "0123456789ABCDEF"[self.jumpto_num // 16] + "0123456789ABCDEF"[self.jumpto_num % 16]
-        elif self.oppcode == "RAMCALL":
-            opperands = "0123456789ABCDEF"[self.jumpto_page] + "0123456789ABCDEF"[self.jumpto_num // 16] + "0123456789ABCDEF"[self.jumpto_num % 16]
         elif self.oppcode == "VALUE":
             opperands = "0123456789ABCDEF"[self.value // 16] + "0123456789ABCDEF"[self.value % 16]
-        elif self.oppcode in {"JUMP", "CALL"}:
-            opperands = "0123456789ABCDEF"[self.jumpto_num // 16] + "0123456789ABCDEF"[self.jumpto_num % 16]
+        elif self.oppcode in {"JUMP"}:
+            opperands = int8_to_nibbles(self.jumpto_local)
+        elif self.oppcode in {"CALL"}:
+            medium, location = self.jumpto_page
+            if medium == "INTERNAL":
+                opperands = int8_to_nibbles(self.jumpto_local)
+            elif medium == "ROM":
+                opperands = "0123456789ABCDEF"[location] + int8_to_nibbles(self.jumpto_local)
+            elif medium == "RAM":
+                opperands = ""
+                if 0 <= location < 2 ** 8:
+                    opperands += "1" + int8_to_nibbles(location)
+                else:
+                    #use some instructions to push location (more than 8 bits) to the stack... hmmm....
+                    raise NotImplementedError(f"RAM call address of {location} is not implemented")
+                opperands += int8_to_nibbles(self.jumpto_local)
+            else:
+                assert False            
         elif self.oppcode == "ROTATE":
             opperands = "0123456789ABCDEF"[self.rot_num % 16] + "0123456789ABCDEF"[self.register]
         elif self.oppcode in {"BRANCH"}:
-            opperands = "0123456789ABCDEF"[self.condition] + "0123456789ABCDEF"[self.jumpto_num // 16] + "0123456789ABCDEF"[self.jumpto_num % 16]
+            opperands = "0123456789ABCDEF"[self.condition] + int8_to_nibbles(self.jumpto_local)
         elif self.oppcode == "OUTPUT":
             opperands = "".join(str(n) for n in self.address_octal[:-1]) + "89ABCDEF"[self.address_octal[-1]]
         else:
@@ -264,26 +264,22 @@ class DirLine(Line):
             if len(opperands) != n:
                 raise Exception(f"P16 Syntax error: Directive command .{self.cmd} has the wrong number of opperands, got {len(opperands)} but need {n}")
         opperands = line_split[1:]
-        if self.cmd == "PAGE":
+        if self.cmd == "PROM":
             check_num_opperands(1)
             self.page = parse_integer(opperands[0])
             if self.page != self.page % 16:
-                raise Exception(f"P16 Syntax error: page numbers range from 0-15, {self.page} is out of this range")
+                raise Exception(f"P16 Syntax error: rom page numbers range from 0-15, {self.page} is out of this range")
         elif self.cmd == "LABEL":
             check_num_opperands(1)
             self.label = opperands[0]
         elif self.cmd == "WAITFLAG":
             #add pass so that 6 nibbles have passed sinse the last flag setting opperation
             check_num_opperands(0)
-        elif self.cmd == "RAM":
+        elif self.cmd == "PRAM":
             check_num_opperands(1)
-            self.ramlabel = opperands[0]
-        elif self.cmd == "RAM_ADR_BITS":
-            check_num_opperands(1)
-            self.bits = parse_integer(opperands[0])
-            if not(0 <= self.bits <= 16):
-                raise Exception(f"P16 Syntax error: Possible values of RAM_ADR_BITS are from 0-16, {self.bits} is out of this range")
-            
+            self.address = parse_integer(opperands[0])
+            if not (0 <= self.address < 2 ** 12):
+                raise Exception(f"P16 Syntax error: ram page addresses range from 0 to {2**12-1}, {self.address} is out of this range")
         else:
             raise Exception(f"P16 Syntax error: Unknown directive command .{self.cmd}")
 
@@ -307,7 +303,7 @@ def make_line(line):
 
 
 class Page():
-    def __init__(self, ident, lines, page_label_lookup, rampage_jumpto_lookup):
+    def __init__(self, ident, lines):
         #1) convert directives into opperations
         new_lines = []
         last_flag_setter = 0
@@ -326,41 +322,7 @@ class Page():
             new_lines.append(line)
             last_flag_setter += line.length()
         lines = new_lines
-                
-        #2) assign addresses to jump, branch and call address labels
-        for line in lines:
-            if isinstance(line, OppLine):
-                if line.oppcode in {"JUMP", "BRANCH", "CALL"}:
-                    if not line.jumpto_label in page_label_lookup[ident]:
-                        raise Exception(f"P16 Syntax error: line {line} refers to label \"{line.jumpto_label}\", but this label has not been assigned")
-                    else:
-                        line.jumpto_num = page_label_lookup[ident][line.jumpto_label]
-
-        #3) assign addresses to pagecalls
-        for line in lines:
-            if isinstance(line, OppLine):
-                if line.oppcode in {"ROMCALL"}:
-                    line.jumpto_page = line.page
-                    try:
-                        line.jumpto_num = page_label_lookup[line.page][line.jumpto_label]
-                    except KeyError:
-                        raise Exception(f"Label \"{line.jumpto_label}\" not found in page {line.jumpto_page}")
-
-                if line.oppcode in {"RAMCALL"}:
-
-                    print(page_label_lookup, rampage_jumpto_lookup)
-
-                    print(line.jumpto_label)
-                    
-                    if type(ident) == int:
-                        line.jumpto_page = ident
-                    else:
-                        raise NotImplementedError("Cannot yet call ram page from within a ram page. Need a P16 hardware update")
-
-
-
                         
-
         self.lines = lines
 
     @property
@@ -379,67 +341,116 @@ class Page():
 
 def compile_assembly(code):
     lines = [make_line(line) for line in code.split("\n")]
-    pages = {}
-
-    current_page = None #either int 0, 1, 2, ..., 15 for a ROM page or a string RAM page label
+    pages = {} #page ident -> instructions
+    
+    current_page = None
     for line in lines:
         if isinstance(line, DirLine):
-            if line.cmd == "PAGE":
-                current_page = line.page
-            elif line.cmd == "RAM":
-                current_page = line.ramlabel
-            if not current_page in pages:
+            if line.cmd in {"PROM", "PRAM"}:
+                if line.cmd == "PROM":
+                    current_page = ("ROM", line.page)
+                elif line.cmd == "PRAM":
+                    current_page = ("RAM", line.address)
+
+                medium, location = current_page
+                if medium == "ROM":
+                    assert type(location) == int and 0 <= location < 16
+                elif medium == "RAM":
+                    assert type(location) == int and 0 <= location < 2 ** 12
+                    
+                if current_page in pages:
+                    raise Exception(f"P16 Syntax error: .PROM and .PRAM can be called at most once for each address")
+
                 pages[current_page] = []
+                
         if current_page is None and type(line) != Line: #disregard blank lines before the first page setter
-            raise Exception(f"P16 Syntax error: You need to specify a page before any other commands. You probably need to add \".PAGE 0\" as the first line of your code.")
+            raise Exception(f"P16 Syntax error: You need to specify a page before any other commands. You probably need to add \".PROM 0\" as the first line of your code.")
         if not current_page is None:
             pages[current_page].append(line)
 
-    #concatenate ram pages into a single list of lines and compute ramlabel -> ram idx lookup
-
-    #concatenate ram pages into a single list of lines and compute ramlabel -> ram idx lookup
-    rampage_jumpto_lookup = {} #rampage label -> address of start of page
-    rampage_label_order = []
-    ptr = 0
+    #first we compute which page each label belongs to
+    label_page_lookup = {}
     for ident, page in pages.items():
-        if type(ident) == str: #ram page
-            rampage_label_order.append(ident)
-            rampage_jumpto_lookup[ident] = ptr
-            for line in page:
-                ptr += line.length()
-
-    page_label_lookup = {} #{page_ident -> {label -> adr}}
-    for ident, page in pages.items():
-        page_label_lookup[ident] = {}
-        adr = 0
         for line in page:
             if isinstance(line, DirLine):
                 if line.cmd == "LABEL":
-                    if line.label in page_label_lookup[ident]:
-                        raise Exception(f"P16 Syntax error: label \"{line.label}\" can only be assigned once per page")
+                    if line.label in label_page_lookup:
+                        raise Exception(f"P16 Syntax error: Label \"{line.label}\" cannot be used more than once")
+                    label_page_lookup[line.label] = ident
+
+    #now we can set the CALL instructions' jumpto_page
+    for ident in pages:
+        for line in pages[ident]:
+            if isinstance(line, OppLine):
+                if line.oppcode == "CALL":
+                    if not line.jumpto_label in label_page_lookup:
+                        raise Exception(f"P16 Syntax error: line {line} refers to label \"{line.jumpto_label}\", but this label has not been assigned anywhere.")
+                    call_ident = label_page_lookup[line.jumpto_label]
+                    if call_ident == ident:
+                        line.jumpto_page = ("INTERNAL", None)
+                    elif call_ident[0] == "ROM":
+                        line.jumpto_page = call_ident
+                    elif call_ident[0] == "RAM":
+                        line.jumpto_page = call_ident
                     else:
-                        page_label_lookup[ident][line.label] = adr
-            adr += line.length()
-        length = adr
+                        assert False
 
-    pages = {ident : Page(ident, lines, page_label_lookup, rampage_jumpto_lookup) for ident, lines in pages.items()}
+    #then we compute the actual address. This is needed becasue the length of a CALL instruction depends on the type of page it is calling
+    label_local_lookup = {} #label -> local_addr
+    for ident, page in pages.items():
+        local_addr = 0
+        for line in page:
+            if isinstance(line, DirLine):
+                if line.cmd == "LABEL":
+                    if line.label in label_local_lookup:
+                        raise Exception(f"P16 Syntax error: Label \"{line.label}\" cannot be used more than once")
+                    label_local_lookup[line.label] = local_addr
+            local_addr += line.length()
+
+    assert label_page_lookup.keys() == label_local_lookup.keys()
+
+    #now we can compute local jump/branch/call addresses
+    for ident in pages:
+        for line in lines:
+            if isinstance(line, OppLine):
+                if line.oppcode in {"JUMP", "BRANCH", "CALL"}:
+                    if not line.jumpto_label in label_local_lookup:
+                        raise Exception(f"P16 Syntax error: line {line} refers to label \"{line.jumpto_label}\", but this label has not been assigned anywhere.")
+                    goto_ident = label_page_lookup[line.jumpto_label]
+                    if line.oppcode in {"JUMP", "BRANCH"} and ident != goto_ident:
+                        raise Exception(f"P16 Syntax error: line {line} refers to label \"{line.jumpto_label}\". This label has been defined, but it must be defined in the current page for this opperation.")
+                    line.jumpto_local = label_local_lookup[line.jumpto_label]
+
+    pages = {ident : Page(ident, lines) for ident, lines in pages.items()}
     compiled_rom = {}
-    for ident in range(16):
-        if ident in pages:
-            compiled_rom[ident] = pages[ident].compile()
-    compiled_ram = ""
-    for i, rampage_label in enumerate(rampage_label_order):
-        if i != 0:
-            compiled_ram += "  "
-        compiled_ram += pages[rampage_label].compile()
+    compiled_ram = {}
+    for ident in pages:
+        medium, location = ident
+        if medium == "ROM":
+            compiled_rom[location] = pages[ident].compile()
+        elif medium == "RAM":
+            compiled_ram[location] = pages[ident].compile()
+        else:
+            assert False
+    
+    used_ram = set()
+    for addr, nibbles in compiled_ram.items():
+        for offset, nibble in enumerate(nibbles):
+            i = addr + offset
+            if i in used_ram:
+                raise Exception(f"P16 Syntax error: RAM address {i} is used for more than one thing")
+            elif i >= 2**12:
+                raise Exception(f"P16 Syntax error: RAM address {i} is out of range")
+            else:
+                used_ram.add(i)
 
-    for idx, page in compiled_rom.items():
-        if (n := len(page.replace(" ", ""))) > 2 ** 8:
-            raise Exception(f"Page {idx} has more nibbles {n} than the maximum size {2 ** 8}.")
-    n = len(compiled_ram.replace(" ", ""))
-    if n > 4 * 2 ** 12:
-        raise Exception(f"RAM has more nibbles {n} than the maximum size {4 * 2 ** 12}.")
-
+    for page, nibbles in compiled_rom.items():
+        for n in nibbles:
+            assert n in "0123456789ABCDEF "
+    for addr, nibbles in compiled_ram.items():
+        for n in nibbles:
+            assert n in "0123456789ABCDEF "
+                
     return compiled_rom, compiled_ram
         
 
@@ -450,19 +461,21 @@ def compile_print(path):
         rom, ram = compile_assembly(f.read())
         for idx, page in rom.items():
             print(f"Rom {idx}: " + page)
-        print("Ram: " + ram)
+        for idx, page in ram.items():
+            print(f"Ram {idx}: " + page)
 
 
 def compile_schem(source_path, target_path, active_pages = {1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15}): #dont compile page 0 by default
     import schemgen
-    compile_print(source_path)
     
     with open(source_path) as f:
         code, ram = compile_assembly(f.read())
         code = {p : code.get(p, "").replace(" ", "") for p in range(16)}
 
-        ram = ram.replace(" ", "")
-        assert len(ram) < 4 * 2 ** 12
+        ram_nibbles = {}
+        for start_addr, nibbles in ram.items():
+            for offset, nibble in enumerate(nibbles.replace(" ", "")):
+                ram_nibbles[start_addr + offset] = nibble
 
         def ram_adr_to_block_pos(i):
             n = [3, 2, 1, 0, 7, 6, 5, 4][i % 8]
@@ -531,25 +544,24 @@ def compile_schem(source_path, target_path, active_pages = {1, 2, 3, 4, 5, 6, 7,
                         
 
         file = schemgen.blocks_to_schem(gen_blocks(), 0, 0, 0)
-        file.save(target_path)
-        print("Schematic saved")
-
-        if len(ram) - ram.count("0") > 2 ** 12: #over a quarter full
-            print(f"ram do be quite big with {len(ram) - ram.count('0')} sus entries, might cause crashes when loading schematic!!")
+        path = target_path
+        file.save(path)
+        print(f"PROM schematic saved at {path}. Paste on the start button.")
 
         def gen_blocks():
-            for i in range(len(ram)):
+            for i, n in ram_nibbles.items():
                 x, y, z, x_dir = ram_adr_to_block_pos(i)
                 yield schemgen.Block(x + 2 * x_dir, y, z - 1, "minecraft:glass")
-                if ram[i] == "0":
+                if ram_nibbles[i] == "0":
                     yield schemgen.Block(x + x_dir, y, z, "minecraft:brown_wool")
                 else:
-                    yield schemgen.Signal(x + x_dir, y, z, "0123456789ABCDEF".index(ram[i]))
+                    yield schemgen.Signal(x + x_dir, y, z, "0123456789ABCDEF".index(n))
                 
                     
         file = schemgen.blocks_to_schem(gen_blocks(), 0, 0, 0)
-        file.save("ram_" + target_path)
-        print("Schematic saved")
+        path = "ram_" + target_path
+        file.save(path)
+        print(f"PRAM schematic saved at {path}. Paste on the start button and undo.")
 
 
         

@@ -1,31 +1,29 @@
-.PAGE 1
+.PROM 0
 VALUE 0
-.LABEL loop
-ALU dup
-OUTPUT 1.0
-ALU inc
-JUMP loop
-RAMCALL start
-ROMCALL 2 start
-VALUE 0
-VALUE 0
-VALUE 0
-
-.PAGE 2
-VALUE 0
+.LABEL label0
+CALL label1
 VALUE 1
+
+.PROM 1
+VALUE 1
+.LABEL label1
+CALL label2
 VALUE 2
-.LABEL start
-VALUE 69
 
-.RAM rampage1
-OUTPUT 0.1.2.3.4.5.6.7
+.PROM 2
+VALUE 3
+.LABEL label2
+CALL label3
+VALUE 4
 
-.RAM rampage2
-VALUE 0
-.LABEL start
-VALUE 69
+.PRAM 69
+VALUE 5
+.LABEL label3
+CALL label4
+VALUE 6
 
-.RAM rampage3
-VALUE 0
-VALUE 0
+.PRAM 420
+VALUE 7
+.LABEL label4
+CALL label0
+VALUE 8
