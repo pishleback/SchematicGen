@@ -1,5 +1,16 @@
 
 
+ALM1_OPPS = ["PASS", "NOT", "PREAD", "KREAD", "INC", "CIN", "DEC", "CDEC", "PTF", "DUP", "KTF", "DEL", "RSH", "CRSH", "IRSH", "ARSH"]
+ALM2_OPPS = ["SWAP", "SUB", "KWRITE", "PWRITE", "AND", "NAND", "OR", "NOR", "XOR", "NXOR", "RTF", "CMP", "SADD", "SSUB", "CADD", "CSUB"]
+BRANCH_CONDITIONS = {"I" : 0, "!I" : 1,
+                             "Z" : 2, "=" : 2, "!Z" : 3, "!=" : 3,
+                             "N" : 4, "!N" : 5,
+                             "V" : 6, "!V" : 7,
+                             "C" : 8, "u>=" : 8, "!C" : 9, "u<" : 9,
+                             "u>" : 10, "u<=" : 11,
+                             "s>=" : 12, "<" : 13,
+                             "s>" : 14, "s<=" : 15}
+        
 
 class P16SyntaxError(Exception):
     def __str__(self):
@@ -84,22 +95,11 @@ class OppLine(Line):
             check_num_opperands(2)
             self.rot_num = parse_integer(opperands[0])
             self.register = parse_register(opperands[1])
-        elif self.oppcode in {"ALU", "RAM"}:
-            if len(opperands) == 1:
-                if opperands[0] in ALM1[self.oppcode]:
-                    self.aluram_type = 1
-                    self.opperation = ALM1[self.oppcode][opperands[0]]
-                else:
-                    raise P16SyntaxError(f"{opperands[0]} is not a valid {self.oppcode} opperation with 1 opperand")
-            elif len(opperands) == 2:
-                if opperands[0] in ALM2[self.oppcode]:
-                    self.aluram_type = 2
-                    self.opperation = ALM2[self.oppcode][opperands[0]]
-                    self.register = parse_register(opperands[1])
-                else:
-                    raise P16SyntaxError(f"{opperands[0]} is not a valid {self.oppcode} opperation with 2 opperands")
-            else:
-                raise P16SyntaxError(f"ALU/RAM oppcode has the wrong number of opperands, got {len(opperands)} but need either 1 or 2")
+        elif self.oppcode in ALM1_OPPS:
+            check_num_opperands(0)
+        elif self.oppcode in ALM2_OPPS:
+            check_num_opperands(1)
+            self.register = parse_register(opperands[0])
         elif self.oppcode == "PAGERETURN":
             check_num_opperands(0)
         elif self.oppcode == "INPUT":
@@ -118,7 +118,9 @@ class OppLine(Line):
         self.address = None
 
     def sets_flags(self):
-        if self.oppcode == "ALU":
+        if self.oppcode in ALM1_OPPS:
+            return True
+        if self.oppcode in ALM2_OPPS:
             return True
         return False
 
@@ -131,17 +133,6 @@ class OppLine(Line):
                 return "XX"
             else:
                 return "0123456789ABCDEF"[val // 16] + "0123456789ABCDEF"[val % 16]
-
-        alm1_opps = ["PASS", "NOT", "PREAD", "KREAD", "INC", "CIN", "DEC", "CDEC", "PTF", "DUP", "KTF", "DEL", "RSH", "CRSH", "IRSH", "ARSH"]
-        alm2_opps = ["SWAP", "SUB", "KWRITE", "PWRITE", "AND", "NAND", "OR", "NOR", "XOR", "NXOR", "RTF", "CMP", "SADD", "SSUB", "CADD", "CSUB"]
-        branch_conditions = {"I" : 0, "!I" : 1,
-                             "Z" : 2, "=" : 2, "!Z" : 3, "!=" : 3,
-                             "N" : 4, "!N" : 5,
-                             "V" : 6, "!V" : 7,
-                             "C" : 8, "u>=" : 8, "!C" : 9, "u<" : 9,
-                             "u>" : 10, "u<=" : 11,
-                             "s>=" : 12, "<" : 13,
-                             "s>" : 14, "s<=" : 15}
 
         if self.oppcode == "PASS":
             return "0"
@@ -175,10 +166,10 @@ class OppLine(Line):
             return "8" + "0123456789ABCDEF"[self.register]
         elif self.oppcode == "ROTATE":
             return "9" + "0123456789ABCDEF"[self.rot_num % 16] + "0123456789ABCDEF"[self.register]
-        elif self.oppcode in alm1_opps:
-            return "A" + "0123456789ABCDEF"[alm1_opps.index(self.oppcode)]
-        elif self.oppcode in alm2_opps:
-            return "B" + "0123456789ABCDEF"[alm2_opps.index(self.oppcode)] + "0123456789ABCDEF"[self.register]
+        elif self.oppcode in ALM1_OPPS:
+            return "A" + "0123456789ABCDEF"[ALM1_OPPS.index(self.oppcode)]
+        elif self.oppcode in ALM2_OPPS:
+            return "B" + "0123456789ABCDEF"[ALM2_OPPS.index(self.oppcode)] + "0123456789ABCDEF"[self.register]
         elif self.oppcode == "INPUT":
             return "E"
         elif self.oppcode == "OUTPUT":
@@ -235,26 +226,7 @@ def make_line(line):
 
 
 class Page():
-    def __init__(self, ident, lines):
-        #1) convert directives into opperations
-        new_lines = []
-        last_flag_setter = 0
-        for line in lines:
-            if isinstance(line, OppLine):
-                if line.sets_flags():
-                    last_flag_setter = 0
-
-            elif isinstance(line, DirLine):
-                if line.cmd == "WAITFLAG":
-                    while last_flag_setter < 6:
-                        new_lines.append(make_line("PASS"))
-                        last_flag_setter += 1
-                    continue
-                
-            new_lines.append(line)
-            last_flag_setter += line.length()
-        lines = new_lines
-                        
+    def __init__(self, ident, lines):       
         self.lines = lines
 
     @property
@@ -300,6 +272,27 @@ def compile_assembly(code):
         if not current_page is None:
             pages[current_page].append(line)
 
+    #convert .WAITFLAGS into some PASS instructions
+    def parse_waitflag(lines):    
+        new_lines = []
+        last_flag_setter = 0
+        for line in lines:
+            if isinstance(line, OppLine):
+                if line.sets_flags():
+                    last_flag_setter = 0
+
+            elif isinstance(line, DirLine):
+                if line.cmd == "WAITFLAG":
+                    while last_flag_setter < 7:
+                        new_lines.append(make_line("PASS"))
+                        last_flag_setter += 1
+                    continue
+                
+            new_lines.append(line)
+            last_flag_setter += line.length()
+        return new_lines
+    pages = {p : parse_waitflag(lines) for p, lines in pages.items()}
+
     #first we compute which page each label belongs to
     label_page_lookup = {}
     for ident, page in pages.items():
@@ -325,7 +318,7 @@ def compile_assembly(code):
                     elif call_ident[0] == "RAM":
                         line.jumpto_page = call_ident
                     else:
-                        assert False
+                        assert False    
 
     #then we compute the actual address. This is needed becasue the length of a CALL instruction depends on the type of page it is calling
     label_local_lookup = {} #label -> local_addr
