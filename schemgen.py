@@ -71,48 +71,57 @@ def blocks_to_schem(mblocks, x, y, z):
     for block in mblocks:
         blocks[block.pos] = block
     
-    assert len(blocks) != 0
-    min_x = min(p[0] for p in blocks)
-    min_y = min(p[1] for p in blocks)
-    min_z = min(p[2] for p in blocks)
-    we_x = x - min_x
-    we_y = y - min_y
-    we_z = z - min_z
-    blocks = {(p[0] - min_x, p[1] - min_y, p[2] - min_z) : blocks[p] for p in blocks}
-    width = max(p[0] for p in blocks) + 1
-    height = max(p[1] for p in blocks) + 1
-    length = max(p[2] for p in blocks) + 1
+    if len(blocks) == 0:
+        block_data = []
+        palette = {}
+        width = 0
+        height = 0
+        length = 0
+        we_x = x
+        we_y = y
+        we_z = z
+    else:
+        min_x = min(p[0] for p in blocks)
+        min_y = min(p[1] for p in blocks)
+        min_z = min(p[2] for p in blocks)
+        we_x = x - min_x
+        we_y = y - min_y
+        we_z = z - min_z
+        blocks = {(p[0] - min_x, p[1] - min_y, p[2] - min_z) : blocks[p] for p in blocks}
+        width = max(p[0] for p in blocks) + 1
+        height = max(p[1] for p in blocks) + 1
+        length = max(p[2] for p in blocks) + 1
 
-    def t31(x, y, z):
-        assert 0 <= x < width
-        assert 0 <= y < height
-        assert 0 <= z < length
-        idx = x + z * width + y * width * length
-        assert 0 <= idx < width * height * length
-        return idx
-    
-##    def t13(idx):
-##        assert 0 <= idx < width * height * length
-##        yz, x = divmod(idx, width)
-##        y, z = divmod(yz, length)
-##        assert 0 <= x < width
-##        assert 0 <= y < height
-##        assert 0 <= z < length
-##        return x, y, z
-
-    for x in range(width):
-        for y in range(height):
-            for z in range(length):
-                if not (x, y, z) in blocks:
-                    blocks[(x, y, z)] = Block(min_x + x, min_y + y, min_z + z, "minecraft:air")
-
-    palette = {ident : idx for idx, ident in enumerate(set(block.ident + block.extra for block in blocks.values()))}
-
-    block_data = [None] * (width * height * length)
-    for p in blocks:
-        block = blocks[p]
-        block_data[t31(*p)] = palette[block.ident + block.extra]
+        def t31(x, y, z):
+            assert 0 <= x < width
+            assert 0 <= y < height
+            assert 0 <= z < length
+            idx = x + z * width + y * width * length
+            assert 0 <= idx < width * height * length
+            return idx
         
+    ##    def t13(idx):
+    ##        assert 0 <= idx < width * height * length
+    ##        yz, x = divmod(idx, width)
+    ##        y, z = divmod(yz, length)
+    ##        assert 0 <= x < width
+    ##        assert 0 <= y < height
+    ##        assert 0 <= z < length
+    ##        return x, y, z
+
+        for x in range(width):
+            for y in range(height):
+                for z in range(length):
+                    if not (x, y, z) in blocks:
+                        blocks[(x, y, z)] = Block(min_x + x, min_y + y, min_z + z, "minecraft:air")
+
+        palette = {ident : idx for idx, ident in enumerate(set(block.ident + block.extra for block in blocks.values()))}
+
+        block_data = [None] * (width * height * length)
+        for p in blocks:
+            block = blocks[p]
+            block_data[t31(*p)] = palette[block.ident + block.extra]
+            
     def gen_ents():
         for p in blocks:
             block = blocks[p]

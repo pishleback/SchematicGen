@@ -1,29 +1,8 @@
 .PROM 0
-VALUE 0
-.LABEL label0
-CALL label1
-VALUE 1
-
-.PROM 1
-VALUE 1
-.LABEL label1
-CALL label2
-VALUE 2
-
-.PROM 2
-VALUE 3
-.LABEL label2
-CALL label3
-VALUE 4
+CALL scarybit
 
 .PRAM 69
-VALUE 5
-.LABEL label3
-CALL label4
-VALUE 6
-
-.PRAM 420
-VALUE 7
-.LABEL label4
-CALL label0
-VALUE 8
+.LABEL scarybit
+VALUE 1
+OUTPUT 1.0
+RETURN
