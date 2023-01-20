@@ -160,10 +160,10 @@ class OppLine(Line):
             if medium == "INTERNAL":
                 return "6" + int8_to_nibbles(self.jumpto_local)
             elif medium == "ROM":
-                return "" + "0123456789ABCDEF"[location] + int8_to_nibbles(self.jumpto_local)
+                return "C" + "0123456789ABCDEF"[location] + int8_to_nibbles(self.jumpto_local)
             elif medium == "RAM":
                 #push address
-                ans = "C" + "0123456789ABCDEF"[(location // (2 ** 12)) % 16] + "0123456789ABCDEF"[(location // (2 ** 8)) % 16] + "0123456789ABCDEF"[(location // (2 ** 4)) % 16] + "0123456789ABCDEF"[location % 16]
+                ans = "1" + "0123456789ABCDEF"[(location // (2 ** 12)) % 16] + "0123456789ABCDEF"[(location // (2 ** 8)) % 16] + "0123456789ABCDEF"[(location // (2 ** 4)) % 16] + "0123456789ABCDEF"[location % 16]
                 #then call ram
                 ans += "D" + int8_to_nibbles(self.jumpto_local)
                 return ans
@@ -365,13 +365,13 @@ def compile_assembly(code):
         else:
             assert False
     
-    used_ram = set()
+    used_ram = set() #store the used ram locations in nibbles
     for addr, nibbles in compiled_ram.items():
         for offset, nibble in enumerate(nibbles):
-            i = addr + offset
+            i = 4 * addr + offset #4* here becasue there are 4 nibbles per 16 bit ram location
             if i in used_ram:
                 raise P16SyntaxError(f"RAM address {i} is used for more than one thing")
-            elif i >= 2**12:
+            elif i >= 2 ** 12:
                 raise P16SyntaxError(f"RAM address {i} is out of range")
             else:
                 used_ram.add(i)
@@ -397,7 +397,7 @@ def compile_print(path):
             print(f"Ram {idx}: " + page)
 
 
-def compile_schem(source_path, target_path, active_pages = {1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15}): #dont compile page 0 by default
+def compile_schem(source_path, active_pages = {1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15}):
     import schemgen
     
     with open(source_path) as f:
@@ -407,13 +407,13 @@ def compile_schem(source_path, target_path, active_pages = {1, 2, 3, 4, 5, 6, 7,
         ram_nibbles = {}
         for start_addr, nibbles in ram.items():
             for offset, nibble in enumerate(nibbles.replace(" ", "")):
-                ram_nibbles[start_addr + offset] = nibble
+                ram_nibbles[4 * start_addr + offset] = nibble #4* becasue each 16 bit ram location holds 4 nibbles
 
         def ram_adr_to_block_pos(i):
-            n = [3, 2, 1, 0, 7, 6, 5, 4][i % 8]
-            xi = (i // 1024) % 16
-            yi = (i // 8) % 4
-            zi = (i // 32) % 32
+            n = [3, 2, 1, 0, 7, 6, 5, 4][i % 8] #which nibble in the block of 8
+            xi = (i // (2 ** 10)) % 16
+            yi = (i // (2 ** 3)) % 4 #which vertical block of 8 nibbles
+            zi = (i // (2 ** 5)) % 32
             x_dir = [1, -1][xi % 2]
 
             x = 17 - 6 * xi - 3 * x_dir
@@ -470,17 +470,16 @@ def compile_schem(source_path, target_path, active_pages = {1, 2, 3, 4, 5, 6, 7,
                                 x, y, z = xo - 2 * (i % 32), yo - 2 * (i // 32), zo
                                 m = "0123456789ABCDEF".index(n)
                                 if m == 0:
-                                    yield schemgen.Block(0, 0, 0, "minecraft:glass")
+                                    yield schemgen.Block(x, y, z, "minecraft:glass")
                                 else:
                                     yield schemgen.Signal(x, y, z, m)
         
         
         file = schemgen.blocks_to_schem(gen_blocks(), 0, 0, 0)
-        path = target_path
-        file.save(path)
-        print(f"PROM schematic saved at \"{path}\" Paste on the start button.")
+        file.save("rom.schem")
+        print(f"PROM schematic saved. \"//paste -a\" on the start button.")
         
-        def gen_blocks():
+        def gen_blocks():            
             for i, n in ram_nibbles.items():
                 x, y, z, x_dir = ram_adr_to_block_pos(i)
                 yield schemgen.Block(x + 2 * x_dir, y, z - 1, "minecraft:glass")
@@ -490,9 +489,8 @@ def compile_schem(source_path, target_path, active_pages = {1, 2, 3, 4, 5, 6, 7,
                     yield schemgen.Signal(x + x_dir, y, z, "0123456789ABCDEF".index(n))
         
         file = schemgen.blocks_to_schem(gen_blocks(), 0, 0, 0)
-        path = "ram_" + target_path
-        file.save(path)
-        print(f"PRAM schematic saved at \"{path}\" Paste on the start button and undo.")
+        file.save("ram.schem")
+        print(f"PRAM schematic saved. \"//paste -a\" on the start button and then \"//undo\".")
 
 
         
@@ -501,7 +499,7 @@ def compile_schem(source_path, target_path, active_pages = {1, 2, 3, 4, 5, 6, 7,
 
 if __name__ == "__main__":
     compile_print("P16_source.txt") #ass -> schem
-    compile_schem("P16_source.txt", "P16_output.schem") #ass -> schem
+    compile_schem("P16_source.txt") #ass -> schem
 
 
 
