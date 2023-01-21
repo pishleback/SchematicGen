@@ -3,13 +3,13 @@
 ALM1_OPPS = ["PASS", "NOT", "PREAD", "KREAD", "INC", "CIN", "DEC", "CDEC", "PTF", "DUP", "KTF", "DEL", "RSH", "CRSH", "IRSH", "ARSH"]
 ALM2_OPPS = ["SWAP", "SUB", "KWRITE", "PWRITE", "AND", "NAND", "OR", "NOR", "XOR", "NXOR", "RTF", "CMP", "SADD", "SSUB", "CADD", "CSUB"]
 BRANCH_CONDITIONS = {"I" : 0, "!I" : 1,
-                             "Z" : 2, "=" : 2, "!Z" : 3, "!=" : 3,
-                             "N" : 4, "!N" : 5,
-                             "V" : 6, "!V" : 7,
-                             "C" : 8, "u>=" : 8, "!C" : 9, "u<" : 9,
-                             "u>" : 10, "u<=" : 11,
-                             "s>=" : 12, "<" : 13,
-                             "s>" : 14, "s<=" : 15}
+                     "Z" : 2, "=" : 2, "!Z" : 3, "!=" : 3,
+                     "N" : 4, "!N" : 5,
+                     "V" : 6, "!V" : 7,
+                     "C" : 8, "u>=" : 8, "!C" : 9, "u<" : 9,
+                     "u>" : 10, "u<=" : 11,
+                     "s>=" : 12, "<" : 13,
+                     "s>" : 14, "s<=" : 15}
         
 
 class P16SyntaxError(Exception):
