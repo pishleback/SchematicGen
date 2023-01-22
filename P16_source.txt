@@ -1,7 +1,8 @@
 .PROM 1
-VALUE 7
-VALUE 13
+.LABEL start
+INPUT
 POP r0
+INPUT
 POP r1
 
 VALUE 0
@@ -25,4 +26,4 @@ RTF r0
 BRANCH !Z mult_loop_start
 PUSH r2
 OUTPUT 1.0
-INPUT
+JUMP start
