@@ -490,7 +490,7 @@ if __name__ == "__main__":
         code = f.read()
         rom, ram = compile_assembly(code)
         print_nibbles(rom, ram)
-##        nibbles_to_schem(rom, ram)
+        nibbles_to_schem(rom, ram)
 
 
 

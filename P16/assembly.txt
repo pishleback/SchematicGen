@@ -1,29 +1,43 @@
-.PROM 1
-.LABEL start
-INPUT
-POP r0
-INPUT
-POP r1
-
+.PROM 4
 VALUE 0
-POP r2
-
-.LABEL mult_loop_start
-PUSH r0
-RSH
 POP r0
-.WAITFLAG
-BRANCH !C skipadd
-PUSH r2
-ADD r1
-POP r2
-.LABEL skipadd
-PUSH r1
-ADD r1
+VALUE 1
 POP r1
-RTF r0
-.WAITFLAG
-BRANCH !Z mult_loop_start
-PUSH r2
-OUTPUT 1.0
-JUMP start
+.LABEL loop
+PUSH r0
+OUTPUT 2
+
+PUSH r0
+ADD r1
+POP r0
+
+PUSH r1
+OUTPUT 2
+
+PUSH r1
+ADD r0
+POP r1
+
+JUMP loop
+
+
+
+
+.PROM 5
+VALUE 0
+POP r0
+
+.LABEL loop2
+
+PUSH r0
+OUTPUT 3.4
+
+VALUE 1
+ADD r0
+
+PUSH r0
+OUTPUT 3.7
+
+POP r0
+
+JUMP loop2
